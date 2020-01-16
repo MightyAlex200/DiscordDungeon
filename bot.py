@@ -60,8 +60,8 @@ class Visibility(Enum):
             return "Private"
         raise Exception(f'Not a visibility {i}')
 
-    Public = 0
-    PublicLocked = 1
+    Public = 0  # TODO
+    PublicLocked = 1  # TODO
     Private = 2
 
 
