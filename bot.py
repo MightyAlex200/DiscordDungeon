@@ -108,8 +108,8 @@ class Game:
             loop = asyncio.get_event_loop()
             try:
                 res = await asyncio.wait_for(loop.run_in_executor(
-                    pool, self.story_manager.act, f'> {to_calc[0]} {to_calc[1]}.'), self.timeout, loop=loop)
-                await self.channel.send(f'> {to_calc[0]} {to_calc[1]}.{res}')
+                    pool, self.story_manager.act, f'\n> {to_calc[0]} {to_calc[1]}.\n'), self.timeout, loop=loop)
+                await self.channel.send(f'> {to_calc[0]} {to_calc[1]}.\n{res}')
             except asyncio.TimeoutError:
                 await self.channel.send('TIMEOUT REACHED. OPERATION CANCELLED')
             self.player_idx += 1
