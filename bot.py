@@ -1,0 +1,468 @@
+import typing
+from enum import Enum
+import re
+import concurrent.futures
+import asyncio
+
+from generator.gpt2.gpt2_generator import *
+from story import grammars
+from story.story_manager import *
+from story.utils import *
+
+import discord
+from discord.ext import commands
+from discord.ext.commands import CommandNotFound, guild_only
+
+
+class GameMode(Enum):
+    @classmethod
+    async def convert(cls, ctx, arg):
+        arg = arg.lower()
+        if arg == "anarchy":
+            return cls.Anarchy
+        elif arg == 'ordered':
+            return cls.Ordered
+        raise Exception(f'Not a gamemode {arg}')
+
+    @classmethod
+    def str(cls, i: int):
+        if i == cls.Anarchy:
+            return 'Anarchy'
+        elif i == cls.Ordered:
+            return 'Ordered'
+        raise Exception(f'Not a gamemode {i}')
+
+    Anarchy = 0
+    Ordered = 1
+
+
+class Visibility(Enum):
+    @classmethod
+    async def convert(cls, ctx, arg):
+        arg = arg.lower()
+        if arg == "public":
+            return cls.Public
+        elif arg == "publiclocked":
+            return cls.PublicLocked
+        elif arg == "private":
+            return cls.Private
+        raise Exception(f'Not a visibility {arg}')
+
+    @classmethod
+    def str(cls, i: int):
+        if i == cls.Public:
+            return "Public"
+        elif i == cls.PublicLocked:
+            return "PublicLocked"
+        elif i == cls.Private:
+            return "Private"
+        raise Exception(f'Not a visibility {i}')
+
+    Public = 0
+    PublicLocked = 1
+    Private = 2
+
+
+def create_story_manager(game):
+    # blocking
+    generator = GPT2Generator()
+    story_manager = UnconstrainedStoryManager(generator)
+    story_manager.start_new_story(
+        game.prompt, context="", upload_story=False
+    )
+    return story_manager
+
+
+class Game:
+    def __init__(self, owner, channel):
+        self._queue = []
+        self.owner = owner
+        self.nsfw = False
+        self.channel = channel
+        self.visibility = Visibility.Private
+        self.players = [owner]
+        self.player_idx = 0
+        self.started = False
+        self.gamemode = GameMode.Ordered
+        self.vote_kick = False
+        self.vote_revert = False
+        self.vote_retry = False
+        self.story_manager = None
+        self.prompt = None
+        self.calculating = False
+
+    async def initialize_story_manager(self):
+        with concurrent.futures.ThreadPoolExecutor(max_workers=1) as pool:
+            loop = asyncio.get_event_loop()
+            self.story_manager = await loop.run_in_executor(
+                pool, create_story_manager, self)
+
+    async def consume_queue(self):
+        self.calculating = True
+        to_calc = self._queue.pop(0)
+        if to_calc:
+            with concurrent.futures.ThreadPoolExecutor(max_workers=1) as pool:
+                loop = asyncio.get_event_loop()
+                res = await loop.run_in_executor(
+                    pool, self.story_manager.act, f'{to_calc[0]} {to_calc[1]}')
+                await self.channel.send(res)
+            self.player_idx += 1
+            self.player_idx %= len(self.players)
+            if len(self._queue) > 0:
+                await self.consume_queue()
+        self.calculating = False
+
+    async def add_to_queue(self, player, msg):
+        if self.gamemode == GameMode.Ordered:
+            if self.players[self.player_idx] == player.id:
+                self._queue.append((player.display_name, msg))
+                if not self.calculating:
+                    await self.consume_queue()
+        elif self.gamemode == GameMode.Anarchy:
+            self._queue.append((player.display_name, msg))
+            if not self.calculating:
+                await self.consume_queue()
+        else:
+            raise Exception('Gamemode is out of bounds')
+
+
+# TODO: persist this
+# ChannelId -> Game
+channel_games = dict()
+
+bot = commands.Bot(command_prefix='!')
+
+# game
+#  x create
+#  x start
+#  x stop
+#  x invite
+#  x config
+#    x give
+#    x nsfw
+#    x visibility
+#    x gamemode
+#    x prompt
+#    x votable
+#      x kick
+#      x revert
+#      x retry
+#  x delete
+#  x list
+# cmd
+#  - revert
+#  - kick
+#  - retry
+
+
+def get_game_channels(guild: discord.Guild):
+    accepted_categories = ['lobbies', 'archived']
+    return [chan for cat in guild.categories if cat.name in accepted_categories for chan in cat.text_channels]
+
+
+def is_valid_game_name(ctx, name):
+    return name and \
+        len(name) <= 100 and \
+        re.match('^[0-9a-z-_]+$', name) and \
+        (not any(map(lambda chan: chan.name == name, get_game_channels(ctx.guild))))
+
+
+def generate_valid_game_name(ctx):
+    counter = 0
+    while True:
+        counter += 1
+        name = f'{cleanse(ctx.author.display_name)}s-game-{counter}'
+        if is_valid_game_name(ctx, name):
+            return name
+
+
+def valid_game_name(ctx, name):
+    if is_valid_game_name(ctx, name):
+        return name
+    else:
+        return generate_valid_game_name(ctx)
+
+
+@bot.group()
+async def game(ctx):
+    """Manage your games"""
+    if ctx.invoked_subcommand is None:
+        raise CommandNotFound()
+
+
+def cleanse(s):
+    return re.sub('[^0-9a-z-_]', '-', s.lower().replace(' ', '-'))
+
+
+@guild_only()
+@game.command()
+async def create(ctx, *, name: typing.Optional[str]):
+    """Create a game"""
+    if name:
+        name = cleanse(name)
+        if not is_valid_game_name(ctx, name):
+            await ctx.send("INVALID GAME NAME, DEFAULTING")
+    name = valid_game_name(ctx, name)
+    overwrites = {
+        ctx.guild.default_role: discord.PermissionOverwrite(read_messages=False),
+        ctx.guild.me: discord.PermissionOverwrite(read_messages=True),
+        ctx.guild.get_member(ctx.author.id): discord.PermissionOverwrite(read_messages=True)
+    }
+    category = next(
+        cat for cat in ctx.guild.categories if cat.name == 'lobbies')
+    channel = await ctx.guild.create_text_channel(name, overwrites=overwrites, category=category)
+    channel_games[channel.id] = Game(ctx.author.id, channel)
+    await ctx.send(f'Created channel {channel.mention}')
+    await channel.send(f'{ctx.author.mention}, this is your new game lobby')
+    await channel.send('Use the command `game config` to see and control the configuration of this game')
+    await channel.send('Also see `help game config`')
+
+
+@guild_only()
+@game.command()
+async def invite(ctx, player: discord.Member, chan: typing.Optional[discord.TextChannel]):
+    """Invite a player to a game"""
+    if player.id == bot.user.id:
+        return await ctx.send('CANNOT ADD THIS BOT AS PARTICIPANT')
+    chan = owned_game_channel(ctx, chan)
+    game = channel_games[chan.id]
+    if player.id in game.players:
+        await ctx.send('THIS PLAYER IS ALREADY INVITED')
+    else:
+        game.players.append(player.id)
+        await chan.set_permissions(player, read_messages=True)
+        await ctx.send('PLAYER ADDED TO GAME')
+
+
+@guild_only()
+@game.command()
+async def start(ctx, chan: typing.Optional[discord.TextChannel]):
+    """Start a game"""
+    chan = owned_game_channel(ctx, chan)
+    game = channel_games[chan.id]
+    if game.prompt:
+        if game.story_manager is None:
+            await ctx.send('Initializing AI Dungeon. This make take some time.')
+            await game.initialize_story_manager()
+            await ctx.send('Initialization complete.')
+        game.started = True
+        await ctx.send('GAME STARTED')
+    else:
+        await ctx.send('PROMPT REQUIRED')
+
+
+@guild_only()
+@game.command()
+async def stop(ctx, chan: typing.Optional[discord.TextChannel]):
+    """Stop a game"""
+    chan = owned_game_channel(ctx, chan)
+    channel_games[chan.id].started = False
+    await ctx.send('GAME STOPPED')
+
+
+@guild_only()
+@game.command()
+async def list(ctx):
+    """List your lobbies"""
+    res = 'YOUR GAMES:\n'
+    any_exist = False
+    for chan in get_game_channels(ctx.guild):
+        if chan.id in channel_games and channel_games[chan.id].owner == ctx.author.id:
+            res += f'- {chan.mention}\n'
+            any_exist = True
+    if any_exist:
+        await ctx.send(res)
+    else:
+        await ctx.send('YOU HAVE NO GAME LOBBIES')
+
+
+@guild_only()
+@game.command()
+async def delete(ctx, chan: typing.Optional[discord.TextChannel]):
+    """Delete one of your games"""
+    chan = owned_game_channel(ctx, chan)
+    if chan.id in channel_games and channel_games[chan.id].owner == ctx.author.id:
+        channel_games.pop(chan.id)
+        await chan.delete()
+        if not ctx.channel == chan:
+            await ctx.send('GAME DELETED')
+        return
+    await ctx.send('YOU DO NOT HAVE AUTHORIZIATION TO DELETE THIS CHANNEL')
+
+
+@game.group()
+async def config(ctx):
+    """Configure your games"""
+    if ctx.invoked_subcommand is None:
+        raise CommandNotFound()
+
+
+class GameChannelInvalidOrNotOwnedException(Exception):
+    pass
+
+
+def owned_game_channel(ctx, chan: typing.Optional[discord.TextChannel]):
+    if chan:
+        if chan.id in channel_games and channel_games[chan.id].owner == ctx.author.id:
+            return chan
+    else:
+        return owned_game_channel(ctx, ctx.channel)
+    raise GameChannelInvalidOrNotOwnedException
+
+
+@guild_only()
+@config.command()
+async def give(ctx, user: discord.Member, chan: typing.Optional[discord.TextChannel]):
+    """Transfer ownership of a game"""
+    chan = owned_game_channel(ctx, chan)
+    channel_games[chan.id].owner = user.id
+    await ctx.send('OWNERSHIP TRANSFERED')
+
+
+@guild_only()
+@config.command()
+async def nsfw(ctx, nsfw: typing.Optional[bool], chan: typing.Optional[discord.TextChannel]):
+    """Set NSFW status of a game"""
+    chan = owned_game_channel(ctx, chan)
+    game = channel_games[chan.id]
+    if nsfw is not None:
+        game.nsfw = nsfw
+        await chan.edit(nsfw=nsfw)
+        await ctx.send('NSFW STATUS UPDATED')
+    else:
+        await ctx.send(f'NSFW STATUS IS {str(game.nsfw).upper()}')
+
+
+@guild_only()
+@config.command()
+async def visibility(ctx, visibility: typing.Optional[Visibility], chan: typing.Optional[discord.TextChannel]):
+    """Set visibility of a game (public, publiclocked, private)"""
+    chan = owned_game_channel(ctx, chan)
+    game = channel_games[chan.id]
+    if visibility is not None:
+        game.visibility = visibility
+        # overwrites = {
+        #     ctx.guild.default_role: discord.PermissionOverwrite(read_messages=True)}
+        for target in chan.overwrites:
+            await chan.set_permissions(target, overwrite=None)
+        if visibility == Visibility.Private:
+            # overwrites[ctx.guild.default_role] = discord.PermissionOverwrite(
+            #     read_messages=False)
+            await chan.set_permissions(ctx.guild.default_role, read_messages=False)
+            # overwrites[ctx.guild.me] = discord.PermissionOverwrite(
+            #     read_messages=True)
+            await chan.set_permissions(ctx.guild.me, read_messages=False)
+            for player in game.players:
+                await chan.set_permissions(player, read_messages=True)
+
+        # await chan.edit(overwrites=overwrites)
+        await ctx.send('VISIBILITY UPDATED')
+    else:
+        await ctx.send(f'VISIBILITY STATUS IS {Visibility.str(game.visibility).upper()}')
+
+
+@guild_only()
+@config.command()
+async def gamemode(ctx, gamemode: typing.Optional[GameMode], chan: typing.Optional[discord.TextChannel]):
+    """Set gamemode of game (anarchy or ordered)"""
+    chan = owned_game_channel(ctx, chan)
+    game = channel_games[chan.id]
+    if gamemode is not None:
+        game.gamemode = gamemode
+        await ctx.send('GAMEMODE UPDATED')
+    else:
+        await ctx.send(f'GAMEMODE IS {GameMode.str(game.gamemode).upper()}')
+
+
+@guild_only()
+@config.command()
+async def prompt(ctx, *, prompt: str):
+    """Set the prompt of the story"""
+    chan = owned_game_channel(ctx, ctx.channel)
+    game = channel_games[chan.id]
+    game.prompt = prompt
+    await ctx.send('PROMPT SET')
+
+
+@config.group()
+async def votable(ctx):
+    """Configure what parts of the game are subject to democratic decision"""
+    if ctx.invoked_subcommand is None:
+        raise CommandNotFound()
+
+
+@guild_only()
+@votable.command()
+async def kick(ctx, votable: typing.Optional[bool], chan: typing.Optional[discord.TextChannel]):
+    """Set if players can vote to kick others"""
+    chan = owned_game_channel(ctx, chan)
+    game = channel_games[chan.id]
+    if votable is not None:
+        game.vote_kick = votable
+        await ctx.send('VOTE KICK STATUS UPDATED')
+    else:
+        await ctx.send(f'VOTE KICK STATUS IS {str(game.vote_kick).upper()}')
+
+
+@guild_only()
+@votable.command()
+async def revert(ctx, votable: typing.Optional[bool], chan: typing.Optional[discord.TextChannel]):
+    """Set if players can vote to revert an action"""
+    chan = owned_game_channel(ctx, chan)
+    game = channel_games[chan.id]
+    if votable is not None:
+        game.vote_revert = votable
+        await ctx.send('VOTE REVERT STATUS UPDATED')
+    else:
+        await ctx.send(f'VOTE REVERT STATUS IS {str(game.vote_revert).upper()}')
+
+
+@guild_only()
+@votable.command()
+async def retry(ctx, votable: typing.Optional[bool], chan: typing.Optional[discord.TextChannel]):
+    """Set if players can vote to retry an action"""
+    chan = owned_game_channel(ctx, chan)
+    game = channel_games[chan.id]
+    if votable is not None:
+        game.vote_retry = votable
+        await ctx.send('VOTE RETRY STATUS UPDATED')
+    else:
+        await ctx.send(f'VOTE RETRY STATUS IS {str(game.vote_retry).upper()}')
+
+
+@guild_only()
+@bot.command()
+async def clear_lobbies(ctx):
+    """Delete all lobby channels"""
+    if ctx.message.author.guild_permissions.administrator:
+        for chan in get_game_channels(ctx.guild):
+            await chan.delete()
+        await ctx.send('64K RAM SYSTEM   38911 BASIC BYTES FREE\n\nREADY.')
+
+
+@bot.event
+async def on_ready():
+    print(f'Logged in as {bot.user}')
+
+
+@bot.event
+async def on_message(msg):
+    ctx = await bot.get_context(msg)
+    if ctx.valid:
+        await bot.invoke(ctx)
+    elif not msg.content.startswith('(') and msg.author.id != bot.user.id and ctx.guild and ctx.channel.id in channel_games:
+        game = channel_games[ctx.channel.id]
+        if game.started and msg.author.id in game.players:
+            async with ctx.channel.typing():
+                await game.add_to_queue(msg.author, msg.content)
+
+
+@bot.event
+async def on_command_error(ctx, error):
+    if isinstance(error, CommandNotFound):
+        return await ctx.send('COMMAND NOT ACCEPTED')
+    return await ctx.send(f'ERROR EXECUTING COMMAND: {error}')
+    # raise error
+
+with open('.key', 'r', encoding='utf-8') as f:
+    bot.run(f.read())
