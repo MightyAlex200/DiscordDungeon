@@ -233,18 +233,24 @@ async def create(ctx, *, name: typing.Optional[str]):
 
 @guild_only()
 @game.command()
-async def invite(ctx, player: discord.Member, chan: typing.Optional[discord.TextChannel]):
+async def invite(ctx, player: typing.Union[discord.Member, discord.Role], chan: typing.Optional[discord.TextChannel]):
     """Invite a player to a game"""
-    if player.id == bot.user.id:
-        return await ctx.send('CANNOT ADD THIS BOT AS PARTICIPANT')
     chan = owned_game_channel(ctx, chan)
     game = channel_games[chan.id]
-    if player.id in game.players:
-        await ctx.send('THIS PLAYER IS ALREADY INVITED')
-    else:
+
+    async def add_player(p):
+        if player.id == bot.user.id:
+            return await ctx.send('CANNOT ADD THIS BOT AS PARTICIPANT')
         game.players.append(player.id)
         await chan.set_permissions(player, read_messages=True)
-        await ctx.send('PLAYER ADDED TO GAME')
+
+    if player is discord.Member:
+        await add_player(player)
+    else:
+        for p in player.members:
+            await add_player(p)
+
+    await ctx.send('PLAYER(S) ADDED TO GAME')
 
 
 @guild_only()
