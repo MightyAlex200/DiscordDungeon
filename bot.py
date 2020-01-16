@@ -109,13 +109,21 @@ class Game:
             try:
                 res = await asyncio.wait_for(loop.run_in_executor(
                     pool, self.story_manager.act, f'\n> {to_calc[0]} {to_calc[1]}.\n'), self.timeout, loop=loop)
-                await self.channel.send(f'> {to_calc[0]} {to_calc[1]}.\n{res}')
+                await self.channel.send(
+                    discord.utils.escape_mentions(
+                        discord.utils.escape_markdown(
+                            f'> {to_calc[0]} {to_calc[1]}.\n{res}')))
             except asyncio.TimeoutError:
                 await self.channel.send('TIMEOUT REACHED. OPERATION CANCELLED')
             self.player_idx += 1
             self.player_idx %= len(self.players)
             if len(self._queue) > 0:
                 await self.consume_queue()
+            else:
+                mem = self.channel.guild.get_member(
+                    self.players[self.player_idx])
+                if mem:
+                    await self.channel.send(f'{mem.mention}\'s TURN')
         self.calculating = False
 
     async def add_to_queue(self, player, msg):
@@ -124,10 +132,6 @@ class Game:
                 self._queue.append((player.display_name, msg))
                 if not self.calculating:
                     await self.consume_queue()
-                    mem = self.channel.guild.get_member(
-                        self.players[self.player_idx])
-                    if mem:
-                        await self.channel.send(f'{mem.display_name.upper()}\'s TURN')
         elif self.gamemode == GameMode.Anarchy:
             self._queue.append((player.display_name, msg))
             if not self.calculating:
@@ -269,6 +273,7 @@ async def start(ctx, chan: typing.Optional[discord.TextChannel]):
         await ctx.send('GAME STARTED')
         if response:
             await ctx.send(response)
+        await ctx.send(f'{ctx.guild.get_member(game.players[game.player_idx]).mention.upper()}, IT IS YOUR TURN')
     else:
         await ctx.send('PROMPT REQUIRED')
 
