@@ -272,7 +272,10 @@ async def start(ctx, chan: typing.Optional[discord.TextChannel]):
 async def stop(ctx, chan: typing.Optional[discord.TextChannel]):
     """Stop a game"""
     chan = owned_game_channel(ctx, chan)
-    channel_games[chan.id].started = False
+    game = channel_games[chan.id]
+    game.started = False
+    if game.story_manager:
+        game.story_manager = None
     await ctx.send('GAME STOPPED')
 
 
