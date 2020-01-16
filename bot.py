@@ -106,8 +106,8 @@ class Game:
             with concurrent.futures.ThreadPoolExecutor(max_workers=1) as pool:
                 loop = asyncio.get_event_loop()
                 res = await loop.run_in_executor(
-                    pool, self.story_manager.act, f'> {to_calc[0]} {to_calc[1]}\n\n')
-                await self.channel.send(f'> {to_calc[0]} {to_calc[1]}\n\n{res}')
+                    pool, self.story_manager.act, f'> {to_calc[0]} {to_calc[1]}.')
+                await self.channel.send(f'> {to_calc[0]} {to_calc[1]}.{res}')
             self.player_idx += 1
             self.player_idx %= len(self.players)
             if len(self._queue) > 0:
@@ -120,6 +120,10 @@ class Game:
                 self._queue.append((player.display_name, msg))
                 if not self.calculating:
                     await self.consume_queue()
+                    mem = self.channel.guild.get_member(
+                        self.players[self.player_idx])
+                    if mem:
+                        await self.channel.send(f'{mem.display_name.upper()}\'s TURN')
         elif self.gamemode == GameMode.Anarchy:
             self._queue.append((player.display_name, msg))
             if not self.calculating:
@@ -154,6 +158,7 @@ bot = commands.Bot(command_prefix='!')
 # cmd
 #  - revert
 #  - kick
+#  - insert
 #  - retry
 
 
@@ -214,10 +219,10 @@ async def create(ctx, *, name: typing.Optional[str]):
         cat for cat in ctx.guild.categories if cat.name == 'lobbies')
     channel = await ctx.guild.create_text_channel(name, overwrites=overwrites, category=category)
     channel_games[channel.id] = Game(ctx.author.id, channel)
-    await ctx.send(f'Created channel {channel.mention}')
-    await channel.send(f'{ctx.author.mention}, this is your new game lobby')
-    await channel.send('Use the command `game config` to see and control the configuration of this game')
-    await channel.send('Also see `help game config`')
+    await ctx.send(f'CREATED CHANNEL {channel.mention}')
+    await channel.send(f'{ctx.author.mention}, THIS IS YOUR NEW GAME LOBBY')
+    await channel.send('USE THE COMMAND `GAME CONFIG` TO SEE AND CONTROL THE CONFIGURATION OF THIS GAME')
+    await channel.send('ALSO SEE `HELP GAME CONFIG`')
 
 
 @guild_only()
@@ -245,9 +250,9 @@ async def start(ctx, chan: typing.Optional[discord.TextChannel]):
     if game.prompt:
         response = None
         if game.story_manager is None:
-            await ctx.send('Initializing AI Dungeon. This make take some time.')
+            await ctx.send('INITIALIZING AI DUNGEON. THIS MAY TAKE SOME TIME.')
             response = await game.initialize_story_manager()
-            await ctx.send('Initialization complete.')
+            await ctx.send('INITIALIZATION COMPLETE.')
         game.started = True
         await ctx.send('GAME STARTED')
         if response:
