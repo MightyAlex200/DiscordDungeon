@@ -67,10 +67,10 @@ def create_story_manager(game):
     # blocking
     generator = GPT2Generator()
     story_manager = UnconstrainedStoryManager(generator)
-    story_manager.start_new_story(
+    res = story_manager.start_new_story(
         game.prompt, context="", upload_story=False
     )
-    return story_manager
+    return (story_manager, res)
 
 
 class Game:
@@ -94,8 +94,10 @@ class Game:
     async def initialize_story_manager(self):
         with concurrent.futures.ThreadPoolExecutor(max_workers=1) as pool:
             loop = asyncio.get_event_loop()
-            self.story_manager = await loop.run_in_executor(
+            (sm, res) = await loop.run_in_executor(
                 pool, create_story_manager, self)
+            self.story_manager = sm
+            return res
 
     async def consume_queue(self):
         self.calculating = True
@@ -104,8 +106,8 @@ class Game:
             with concurrent.futures.ThreadPoolExecutor(max_workers=1) as pool:
                 loop = asyncio.get_event_loop()
                 res = await loop.run_in_executor(
-                    pool, self.story_manager.act, f'{to_calc[0]} {to_calc[1]}')
-                await self.channel.send(res)
+                    pool, self.story_manager.act, f'> {to_calc[0]} {to_calc[1]}\n\n')
+                await self.channel.send(f'> {to_calc[0]} {to_calc[1]}\n\n{res}')
             self.player_idx += 1
             self.player_idx %= len(self.players)
             if len(self._queue) > 0:
@@ -241,12 +243,15 @@ async def start(ctx, chan: typing.Optional[discord.TextChannel]):
     chan = owned_game_channel(ctx, chan)
     game = channel_games[chan.id]
     if game.prompt:
+        response = None
         if game.story_manager is None:
             await ctx.send('Initializing AI Dungeon. This make take some time.')
-            await game.initialize_story_manager()
+            response = await game.initialize_story_manager()
             await ctx.send('Initialization complete.')
         game.started = True
         await ctx.send('GAME STARTED')
+        if response:
+            await ctx.send(response)
     else:
         await ctx.send('PROMPT REQUIRED')
 
