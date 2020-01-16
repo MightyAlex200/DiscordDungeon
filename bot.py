@@ -161,8 +161,9 @@ bot = commands.Bot(command_prefix='!')
 #  x delete
 #  x list
 # cmd
-#  - revert
-#  - kick
+#  TODO: Voting
+#  = revert
+#  = kick
 #  - insert
 #  - retry
 
@@ -456,6 +457,45 @@ async def retry(ctx, votable: typing.Optional[bool], chan: typing.Optional[disco
         await ctx.send('VOTE RETRY STATUS UPDATED')
     else:
         await ctx.send(f'VOTE RETRY STATUS IS {str(game.vote_retry).upper()}')
+
+
+@bot.group()
+async def cmd(ctx):
+    """Run or vote for commands in game"""
+    if ctx.invoked_subcommand is None:
+        raise CommandNotFound()
+
+
+@guild_only()
+@cmd.command()
+async def revert(ctx):
+    """Revert an action in game"""
+    chan = owned_game_channel(ctx, ctx.channel)
+    game = channel_games[chan.id]
+    if game.calculating:
+        await ctx.send('PROCESSING IN PROGRESS, PLEASE WAIT BEFORE MODIFYING STORY')
+        return
+    if not game.started:
+        await ctx.send('GAME HAS NOT STARTED. CANNOT REVERT')
+        return
+    if len(game.story_manager.story.actions) != 0:
+        game.story_manager.story.actions.pop()
+        game.story_manager.story.results.pop()
+        await ctx.send('ACTION REVERTED')
+    else:
+        await ctx.send('CANNOT REVERT')
+
+
+@guild_only()
+@cmd.command()
+async def kick(ctx, player: discord.Member):
+    """Kick a player from your game"""
+    chan = owned_game_channel(ctx, ctx.channel)
+    game = channel_games[chan.id]
+    game.players.remove(player.id)
+    game.player_idx %= len(game.players)
+    await chan.set_permissions(player, overwrite=None)
+    await ctx.send('PLAYER REMOVED')
 
 
 @guild_only()
