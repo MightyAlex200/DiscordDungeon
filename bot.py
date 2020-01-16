@@ -13,6 +13,8 @@ import discord
 from discord.ext import commands
 from discord.ext.commands import CommandNotFound, guild_only
 
+pool = concurrent.futures.ThreadPoolExecutor()
+
 
 class GameMode(Enum):
     @classmethod
@@ -89,25 +91,27 @@ class Game:
         self.vote_retry = False
         self.story_manager = None
         self.prompt = None
+        self.timeout = 90
         self.calculating = False
 
     async def initialize_story_manager(self):
-        with concurrent.futures.ThreadPoolExecutor(max_workers=1) as pool:
-            loop = asyncio.get_event_loop()
-            (sm, res) = await loop.run_in_executor(
-                pool, create_story_manager, self)
-            self.story_manager = sm
-            return res
+        loop = asyncio.get_event_loop()
+        (sm, res) = await loop.run_in_executor(
+            pool, create_story_manager, self)
+        self.story_manager = sm
+        return res
 
     async def consume_queue(self):
         self.calculating = True
         to_calc = self._queue.pop(0)
         if to_calc:
-            with concurrent.futures.ThreadPoolExecutor(max_workers=1) as pool:
-                loop = asyncio.get_event_loop()
-                res = await loop.run_in_executor(
-                    pool, self.story_manager.act, f'> {to_calc[0]} {to_calc[1]}.')
+            loop = asyncio.get_event_loop()
+            try:
+                res = await asyncio.wait_for(loop.run_in_executor(
+                    pool, self.story_manager.act, f'> {to_calc[0]} {to_calc[1]}.'), self.timeout, loop=loop)
                 await self.channel.send(f'> {to_calc[0]} {to_calc[1]}.{res}')
+            except asyncio.TimeoutError:
+                await self.channel.send('TIMEOUT REACHED. OPERATION CANCELLED')
             self.player_idx += 1
             self.player_idx %= len(self.players)
             if len(self._queue) > 0:
@@ -149,6 +153,7 @@ bot = commands.Bot(command_prefix='!')
 #    x visibility
 #    x gamemode
 #    x prompt
+#    x timeout
 #    x votable
 #      x kick
 #      x revert
@@ -392,6 +397,19 @@ async def prompt(ctx, *, prompt: str):
     game = channel_games[chan.id]
     game.prompt = prompt
     await ctx.send('PROMPT SET')
+
+
+@guild_only()
+@config.command()
+async def timeout(ctx, timeout: typing.Optional[float], chan: typing.Optional[discord.TextChannel]):
+    """Set the timeout of the bot's writing"""
+    chan = owned_game_channel(ctx, chan)
+    game = channel_games[chan.id]
+    if timeout is not None:
+        game.timeout = timeout
+        await ctx.send('TIMEOUT UPDATED')
+    else:
+        await ctx.send(f'TIMEOUT IS {game.timeout}s')
 
 
 @config.group()
