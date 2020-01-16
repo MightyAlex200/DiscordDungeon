@@ -244,7 +244,7 @@ async def invite(ctx, player: typing.Union[discord.Member, discord.Role], chan: 
         game.players.append(player.id)
         await chan.set_permissions(player, read_messages=True)
 
-    if player is discord.Member:
+    if isinstance(player, discord.Member):
         await add_player(player)
     else:
         for p in player.members:
