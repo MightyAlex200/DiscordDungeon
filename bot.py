@@ -120,10 +120,14 @@ class Game:
             if len(self._queue) > 0:
                 await self.consume_queue()
             else:
-                mem = self.channel.guild.get_member(
-                    self.players[self.player_idx])
-                if mem:
-                    await self.channel.send(f'{mem.mention}\'s TURN')
+                if self.gamemode == GameMode.Ordered:
+                    mem = self.channel.guild.get_member(
+                        self.players[self.player_idx])
+                    if mem:
+                        await self.channel.send(f'{mem.mention}\'s TURN')
+                    else:
+                        print('WARNING: member is None')
+                        print('playerid:', self.players[self.player_idx])
         self.calculating = False
 
     async def add_to_queue(self, player, msg):
@@ -246,7 +250,7 @@ async def invite(ctx, player: typing.Union[discord.Member, discord.Role], chan: 
         if p == bot.user.id:
             return await ctx.send('CANNOT ADD THIS BOT AS PARTICIPANT')
         game.players.append(p)
-        await chan.set_permissions(player, read_messages=True)
+        await chan.set_permissions(p, read_messages=True)
 
     if isinstance(player, discord.Member):
         await add_player(player)
