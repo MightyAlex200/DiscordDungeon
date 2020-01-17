@@ -243,9 +243,9 @@ async def invite(ctx, player: typing.Union[discord.Member, discord.Role], chan: 
     game = channel_games[chan.id]
 
     async def add_player(p):
-        if player.id == bot.user.id:
+        if p == bot.user.id:
             return await ctx.send('CANNOT ADD THIS BOT AS PARTICIPANT')
-        game.players.append(player.id)
+        game.players.append(p)
         await chan.set_permissions(player, read_messages=True)
 
     if isinstance(player, discord.Member):
