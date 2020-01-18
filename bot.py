@@ -249,7 +249,7 @@ async def invite(ctx, player: typing.Union[discord.Member, discord.Role], chan: 
     async def add_player(p):
         if p == bot.user.id:
             return await ctx.send('CANNOT ADD THIS BOT AS PARTICIPANT')
-        game.players.append(p)
+        game.players.append(p.id)
         await chan.set_permissions(p, read_messages=True)
 
     if isinstance(player, discord.Member):
