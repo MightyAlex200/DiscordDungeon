@@ -530,9 +530,12 @@ async def clear_lobbies(ctx):
 @bot.command()
 async def systeminfo(ctx):
     """Print CPU and RAM usage"""
-    mem = psutil.virtual_memory().percent
+    mem = psutil.virtual_memory()
     cpu = psutil.cpu_percent()
-    await ctx.send(f'CPU usage: {cpu}%\n\nRAM usage: {mem}')
+
+    def to_gigs(b):
+        return round(b / 1073741824, 1)
+    await ctx.send(f'CPU usage: {cpu}%\n\nRAM usage: {to_gigs(mem.total - mem.available)} GiB / {to_gigs(mem.total)} GiB ({mem.percent}%)')
 
 
 @bot.event
