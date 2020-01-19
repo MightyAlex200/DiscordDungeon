@@ -7,6 +7,6 @@ RUN apt-get -y install sudo
 
 RUN yes | ./AIDungeon/install.sh
 RUN ./AIDungeon/download_model.sh
-RUN pip install --user discord.py
+RUN pip install --user discord.py psutil
 
 CMD ["bash", "-c", "cd /AIDungeon; python bot.py"]

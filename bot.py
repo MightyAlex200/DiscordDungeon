@@ -12,6 +12,7 @@ from story.utils import *
 import discord
 from discord.ext import commands
 from discord.ext.commands import CommandNotFound, guild_only
+import psutil
 
 pool = concurrent.futures.ThreadPoolExecutor()
 
@@ -524,6 +525,14 @@ async def clear_lobbies(ctx):
         for chan in get_game_channels(ctx.guild):
             await chan.delete()
         await ctx.send('64K RAM SYSTEM   38911 BASIC BYTES FREE\n\nREADY.')
+
+
+@bot.command()
+async def systeminfo(ctx):
+    """Print CPU and RAM usage"""
+    mem = psutil.virtual_memory().percent
+    cpu = psutil.cpu_percent()
+    await ctx.send(f'CPU usage: {cpu}%\n\nRAM usage: {mem}')
 
 
 @bot.event
