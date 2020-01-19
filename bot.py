@@ -291,6 +291,7 @@ async def stop(ctx, chan: typing.Optional[discord.TextChannel]):
     game = channel_games[chan.id]
     game.started = False
     if game.story_manager:
+        game.story_manager.generator.sess.close()
         game.story_manager = None
     await ctx.send('GAME STOPPED')
 
@@ -317,6 +318,9 @@ async def delete(ctx, chan: typing.Optional[discord.TextChannel]):
     """Delete one of your games"""
     chan = owned_game_channel(ctx, chan)
     if chan.id in channel_games and channel_games[chan.id].owner == ctx.author.id:
+        game = channel_games[chan.id]
+        if game.story_manager:
+            game.story_manager.generator.sess.close()
         channel_games.pop(chan.id)
         await chan.delete()
         if not ctx.channel == chan:
