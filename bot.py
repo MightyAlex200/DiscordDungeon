@@ -68,7 +68,7 @@ class Visibility(Enum):
 
 def create_story_manager(game):
     # blocking
-    generator = GPT2Generator(censor=False)
+    generator = GPT2Generator()
     story_manager = UnconstrainedStoryManager(generator)
     res = story_manager.start_new_story(
         game.prompt, context="", upload_story=False
