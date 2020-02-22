@@ -109,7 +109,7 @@ class Game:
             loop = asyncio.get_event_loop()
             try:
                 res = await asyncio.wait_for(loop.run_in_executor(
-                    pool, self.story_manager.act, f'\n> {to_calc[0]} {to_calc[1]}.\n'), self.timeout, loop=loop)
+                    pool, self.story_manager.act, f'\n{to_calc[0]} {to_calc[1]}.\n'), self.timeout, loop=loop)
                 await self.channel.send(
                     discord.utils.escape_mentions(
                         discord.utils.escape_markdown(
