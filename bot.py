@@ -565,7 +565,7 @@ async def on_message(msg):
         game = channel_games[ctx.channel.id]
         if game.started and msg.author.id in game.players:
             async with ctx.channel.typing():
-                await game.add_to_queue(msg.author, msg.content)
+                await game.add_to_queue(msg.author, msg.content[2:])
 
 
 @bot.event
