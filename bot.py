@@ -524,10 +524,14 @@ async def kick(ctx, player: discord.Member):
     """Kick a player from your game"""
     chan = owned_game_channel(ctx, ctx.channel)
     game = channel_games[chan.id]
-    game.players.remove(player.id)
-    game.player_idx %= len(game.players)
-    await chan.set_permissions(player, overwrite=None)
-    await ctx.send('Byeeeeeee~')
+    try:
+        game.players.remove(player.id)
+        game.player_idx %= len(game.players)
+        await chan.set_permissions(player, overwrite=None)
+        await ctx.send('Byeeeeeee~')
+    except ValueError:
+        await ctx.send('FUNCTION kickCurrentPlayer() NOT FOUND')
+        await ctx.send('eheh... :|')
 
 
 @guild_only()
