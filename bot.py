@@ -561,7 +561,7 @@ async def on_message(msg):
     ctx = await bot.get_context(msg)
     if ctx.valid:
         await bot.invoke(ctx)
-    elif not msg.content.startswith('(') and msg.author.id != bot.user.id and ctx.guild and ctx.channel.id in channel_games:
+    elif msg.content.startswith('> ') and msg.author.id != bot.user.id and ctx.guild and ctx.channel.id in channel_games:
         game = channel_games[ctx.channel.id]
         if game.started and msg.author.id in game.players:
             async with ctx.channel.typing():
