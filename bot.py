@@ -276,7 +276,7 @@ async def start(ctx, chan: typing.Optional[discord.TextChannel]):
             response = await game.initialize_story_manager()
             await ctx.send('INITIALIZATION COMPLETE.')
         game.started = True
-        await ctx.send('Ok, game started! :3')
+        await ctx.send('Ok, game started ~w~')
         if response:
             await ctx.send(response)
         if game.gamemode == GameMode.Ordered:
@@ -537,7 +537,7 @@ async def clear_lobbies(ctx):
     if ctx.message.author.guild_permissions.administrator:
         for chan in get_game_channels(ctx.guild):
             await chan.delete()
-        await ctx.send('Goodbye, lobbies :3')
+        await ctx.send('Goodbye, lobbies ~w~')
 
 
 @bot.command()
