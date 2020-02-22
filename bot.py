@@ -252,7 +252,7 @@ async def invite(ctx, player: typing.Union[discord.Member, discord.Role], chan: 
             return await ctx.send('You can\' invite me, I\'m the narrator :P. Thanks anyway though <3')
         game.players.append(p.id)
         await chan.set_permissions(p, read_messages=True)
-        await ctx.send('{p.mention} has been invited >w> <w<')
+        await ctx.send(f'{p.mention} has been invited >w> <w<')
 
     if isinstance(player, discord.Member):
         await add_player(player)
