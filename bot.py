@@ -429,7 +429,7 @@ async def prompt(ctx, *, prompt: str):
     chan = owned_game_channel(ctx, ctx.channel)
     game = channel_games[chan.id]
     game.prompt = prompt
-    await ctx.send('Okay, prompt set :3')
+    await ctx.send('Gotcha! prompt set :3')
 
 
 @guild_only()
@@ -440,7 +440,7 @@ async def timeout(ctx, timeout: typing.Optional[float], chan: typing.Optional[di
     game = channel_games[chan.id]
     if timeout is not None:
         game.timeout = timeout
-        await ctx.send('Timeout updated!')
+        await ctx.send('Gotcha, timeout updated!')
     else:
         await ctx.send(f'Current timeout is {game.timeout} seconds')
 
@@ -460,7 +460,7 @@ async def kick(ctx, votable: typing.Optional[bool], chan: typing.Optional[discor
     game = channel_games[chan.id]
     if votable is not None:
         game.vote_kick = votable
-        await ctx.send('Vote kick status updated')
+        await ctx.send('Gotcha, vote kick status updated')
     else:
         await ctx.send(f'Vote kick status is currently {str(game.vote_kick)}')
 
@@ -473,7 +473,7 @@ async def revert(ctx, votable: typing.Optional[bool], chan: typing.Optional[disc
     game = channel_games[chan.id]
     if votable is not None:
         game.vote_revert = votable
-        await ctx.send('Vote revert status updated')
+        await ctx.send('Gotcha, vote revert status updated')
     else:
         await ctx.send(f'Vote revert status is currently {str(game.vote_revert)}')
 
@@ -486,7 +486,7 @@ async def retry(ctx, votable: typing.Optional[bool], chan: typing.Optional[disco
     game = channel_games[chan.id]
     if votable is not None:
         game.vote_retry = votable
-        await ctx.send('Vote retry status updated')
+        await ctx.send('Gotcha, vote retry status updated')
     else:
         await ctx.send(f'Vote retry status is currently {str(game.vote_retry)}')
 
@@ -513,7 +513,7 @@ async def revert(ctx):
     if len(game.story_manager.story.actions) != 0:
         game.story_manager.story.actions.pop()
         game.story_manager.story.results.pop()
-        await ctx.send('Okay, action reverted :3')
+        await ctx.send('Gotcha, action reverted :3')
     else:
         await ctx.send('Can\'t revert right now, sorry :|')
 
