@@ -115,7 +115,7 @@ class Game:
                         discord.utils.escape_markdown(
                             f'> {to_calc[0]} {to_calc[1]}.\n{res}')))
             except asyncio.TimeoutError:
-                await self.channel.send('TIMEOUT REACHED. OPERATION CANCELLED')
+                await self.channel.send('That took too long :v ... Try another action :3')
             self.player_idx += 1
             self.player_idx %= len(self.players)
             if len(self._queue) > 0:
@@ -125,9 +125,9 @@ class Game:
                     mem = self.channel.guild.get_member(
                         self.players[self.player_idx])
                     if mem:
-                        await self.channel.send(f'{mem.mention}\'s TURN')
+                        await self.channel.send(f'It\'s your turn, {mem.mention}!')
                     else:
-                        print('WARNING: member is None')
+                        print('WARNING: MEMBER IS None')
                         print('playerid:', self.players[self.player_idx])
         self.calculating = False
 
@@ -223,7 +223,7 @@ async def create(ctx, *, name: typing.Optional[str]):
     if name:
         name = cleanse(name)
         if not is_valid_game_name(ctx, name):
-            await ctx.send("INVALID GAME NAME, DEFAULTING")
+            await ctx.send("I can't name it that >.< I just gave you a default name, I hope you don't mind...")
     name = valid_game_name(ctx, name)
     overwrites = {
         ctx.guild.default_role: discord.PermissionOverwrite(read_messages=False),
@@ -234,10 +234,10 @@ async def create(ctx, *, name: typing.Optional[str]):
         cat for cat in ctx.guild.categories if cat.name == 'lobbies')
     channel = await ctx.guild.create_text_channel(name, overwrites=overwrites, category=category)
     channel_games[channel.id] = Game(ctx.author.id, channel)
-    await ctx.send(f'CREATED CHANNEL {channel.mention}')
-    await channel.send(f'{ctx.author.mention}, THIS IS YOUR NEW GAME LOBBY')
-    await channel.send('USE THE COMMAND `GAME CONFIG` TO SEE AND CONTROL THE CONFIGURATION OF THIS GAME')
-    await channel.send('ALSO SEE `HELP GAME CONFIG`')
+    await ctx.send(f'Here\'s your channel :3c {channel.mention}')
+    await channel.send(f'{ctx.author.mention}, this is your new game lobby! :D')
+    await channel.send('Use `game config` to configure this game.')
+    await channel.send('Also check out the `help game config` command c:')
 
 
 @guild_only()
@@ -249,9 +249,10 @@ async def invite(ctx, player: typing.Union[discord.Member, discord.Role], chan: 
 
     async def add_player(p):
         if p == bot.user.id:
-            return await ctx.send('CANNOT ADD THIS BOT AS PARTICIPANT')
+            return await ctx.send('You can\' invite me, I\'m the narrator :P. Thanks anyway though <3')
         game.players.append(p.id)
         await chan.set_permissions(p, read_messages=True)
+        await ctx.send('{p.mention} has been invited >w> <w<')
 
     if isinstance(player, discord.Member):
         await add_player(player)
@@ -259,7 +260,7 @@ async def invite(ctx, player: typing.Union[discord.Member, discord.Role], chan: 
         for p in player.members:
             await add_player(p)
 
-    await ctx.send('PLAYER(S) ADDED TO GAME')
+    await ctx.send('Okay, everyone added!')
 
 
 @guild_only()
@@ -271,16 +272,17 @@ async def start(ctx, chan: typing.Optional[discord.TextChannel]):
     if game.prompt:
         response = None
         if game.story_manager is None:
-            await ctx.send('INITIALIZING AI DUNGEON. THIS MAY TAKE SOME TIME.')
+            await ctx.send('FUNCTION createIsland() IS INITIALIZING. PLEASE WAIT.')
             response = await game.initialize_story_manager()
             await ctx.send('INITIALIZATION COMPLETE.')
         game.started = True
-        await ctx.send('GAME STARTED')
+        await ctx.send('Ok, game started! :3')
         if response:
             await ctx.send(response)
-        await ctx.send(f'{ctx.guild.get_member(game.players[game.player_idx]).mention.upper()}, IT IS YOUR TURN')
+        if game.gamemode == GameMode.Ordered:
+            await ctx.send(f'Okay, {ctx.guild.get_member(game.players[game.player_idx]).mention}, it\'s your turn')
     else:
-        await ctx.send('PROMPT REQUIRED')
+        await ctx.send('UNABLE TO RUN FUNCTION createIsland(): PROMPT REQUIRED')
 
 
 @guild_only()
@@ -293,14 +295,14 @@ async def stop(ctx, chan: typing.Optional[discord.TextChannel]):
     if game.story_manager:
         game.story_manager.generator.sess.close()
         game.story_manager = None
-    await ctx.send('GAME STOPPED')
+    await ctx.send('Ok, game stopped c:')
 
 
 @guild_only()
 @game.command()
 async def list(ctx):
     """List your lobbies"""
-    res = 'YOUR GAMES:\n'
+    res = 'Here are all your games:\n'
     any_exist = False
     for chan in get_game_channels(ctx.guild):
         if chan.id in channel_games and channel_games[chan.id].owner == ctx.author.id:
@@ -309,7 +311,7 @@ async def list(ctx):
     if any_exist:
         await ctx.send(res)
     else:
-        await ctx.send('YOU HAVE NO GAME LOBBIES')
+        await ctx.send('You don\'t have any games :P')
 
 
 @guild_only()
@@ -324,9 +326,9 @@ async def delete(ctx, chan: typing.Optional[discord.TextChannel]):
         channel_games.pop(chan.id)
         await chan.delete()
         if not ctx.channel == chan:
-            await ctx.send('GAME DELETED')
+            await ctx.send('Okay, game deleted!')
         return
-    await ctx.send('YOU DO NOT HAVE AUTHORIZIATION TO DELETE THIS CHANNEL')
+    await ctx.send('FUNCTION deleteGame() FAILED: YOU DO NOT HAVE AUTHORIZIATION TO DELETE THIS CHANNEL')
 
 
 @game.group()
@@ -355,7 +357,7 @@ async def give(ctx, user: discord.Member, chan: typing.Optional[discord.TextChan
     """Transfer ownership of a game"""
     chan = owned_game_channel(ctx, chan)
     channel_games[chan.id].owner = user.id
-    await ctx.send('OWNERSHIP TRANSFERED')
+    await ctx.send('Done, ownership transfered!')
 
 
 @guild_only()
@@ -367,9 +369,13 @@ async def nsfw(ctx, nsfw: typing.Optional[bool], chan: typing.Optional[discord.T
     if nsfw is not None:
         game.nsfw = nsfw
         await chan.edit(nsfw=nsfw)
-        await ctx.send('NSFW STATUS UPDATED')
+        if nsfw:
+            emoticon = ';3'
+        else:
+            emoticon = ':)'
+        await ctx.send(f'NSFW status updated {emoticon}')
     else:
-        await ctx.send(f'NSFW STATUS IS {str(game.nsfw).upper()}')
+        await ctx.send(f'NSFW status is {str(game.nsfw)}')
 
 
 @guild_only()
@@ -395,9 +401,9 @@ async def visibility(ctx, visibility: typing.Optional[Visibility], chan: typing.
                 await chan.set_permissions(player, read_messages=True)
 
         # await chan.edit(overwrites=overwrites)
-        await ctx.send('VISIBILITY UPDATED')
+        await ctx.send('Visibility updated')
     else:
-        await ctx.send(f'VISIBILITY STATUS IS {Visibility.str(game.visibility).upper()}')
+        await ctx.send(f'Visibility status is currently {Visibility.str(game.visibility)}')
 
 
 @guild_only()
@@ -408,9 +414,12 @@ async def gamemode(ctx, gamemode: typing.Optional[GameMode], chan: typing.Option
     game = channel_games[chan.id]
     if gamemode is not None:
         game.gamemode = gamemode
-        await ctx.send('GAMEMODE UPDATED')
+        await ctx.send('Gamemode updated!')
+        mem = game.channel.guild.get_member(
+            game.players[game.player_idx])
+        await ctx.send(f'It\'s your turn, {mem.mention}!')
     else:
-        await ctx.send(f'GAMEMODE IS {GameMode.str(game.gamemode).upper()}')
+        await ctx.send(f'Current gamemode is {GameMode.str(game.gamemode)} :3c')
 
 
 @guild_only()
@@ -420,7 +429,7 @@ async def prompt(ctx, *, prompt: str):
     chan = owned_game_channel(ctx, ctx.channel)
     game = channel_games[chan.id]
     game.prompt = prompt
-    await ctx.send('PROMPT SET')
+    await ctx.send('Okay, prompt set :3')
 
 
 @guild_only()
@@ -431,9 +440,9 @@ async def timeout(ctx, timeout: typing.Optional[float], chan: typing.Optional[di
     game = channel_games[chan.id]
     if timeout is not None:
         game.timeout = timeout
-        await ctx.send('TIMEOUT UPDATED')
+        await ctx.send('Timeout updated!')
     else:
-        await ctx.send(f'TIMEOUT IS {game.timeout}s')
+        await ctx.send(f'Current timeout is {game.timeout} seconds')
 
 
 @config.group()
@@ -451,9 +460,9 @@ async def kick(ctx, votable: typing.Optional[bool], chan: typing.Optional[discor
     game = channel_games[chan.id]
     if votable is not None:
         game.vote_kick = votable
-        await ctx.send('VOTE KICK STATUS UPDATED')
+        await ctx.send('Vote kick status updated')
     else:
-        await ctx.send(f'VOTE KICK STATUS IS {str(game.vote_kick).upper()}')
+        await ctx.send(f'Vote kick status is currently {str(game.vote_kick)}')
 
 
 @guild_only()
@@ -464,9 +473,9 @@ async def revert(ctx, votable: typing.Optional[bool], chan: typing.Optional[disc
     game = channel_games[chan.id]
     if votable is not None:
         game.vote_revert = votable
-        await ctx.send('VOTE REVERT STATUS UPDATED')
+        await ctx.send('Vote revert status updated')
     else:
-        await ctx.send(f'VOTE REVERT STATUS IS {str(game.vote_revert).upper()}')
+        await ctx.send(f'Vote revert status is currently {str(game.vote_revert)}')
 
 
 @guild_only()
@@ -477,9 +486,9 @@ async def retry(ctx, votable: typing.Optional[bool], chan: typing.Optional[disco
     game = channel_games[chan.id]
     if votable is not None:
         game.vote_retry = votable
-        await ctx.send('VOTE RETRY STATUS UPDATED')
+        await ctx.send('Vote retry status updated')
     else:
-        await ctx.send(f'VOTE RETRY STATUS IS {str(game.vote_retry).upper()}')
+        await ctx.send(f'Vote retry status is currently {str(game.vote_retry)}')
 
 
 @bot.group()
@@ -496,17 +505,17 @@ async def revert(ctx):
     chan = owned_game_channel(ctx, ctx.channel)
     game = channel_games[chan.id]
     if game.calculating:
-        await ctx.send('PROCESSING IN PROGRESS, PLEASE WAIT BEFORE MODIFYING STORY')
+        await ctx.send('Hold on, hold on I\'m writing! >.<')
         return
     if not game.started:
-        await ctx.send('GAME HAS NOT STARTED. CANNOT REVERT')
+        await ctx.send('We haven\'t even started the game, silly <w<')
         return
     if len(game.story_manager.story.actions) != 0:
         game.story_manager.story.actions.pop()
         game.story_manager.story.results.pop()
-        await ctx.send('ACTION REVERTED')
+        await ctx.send('Okay, action reverted :3')
     else:
-        await ctx.send('CANNOT REVERT')
+        await ctx.send('Can\'t revert right now, sorry :|')
 
 
 @guild_only()
@@ -518,7 +527,7 @@ async def kick(ctx, player: discord.Member):
     game.players.remove(player.id)
     game.player_idx %= len(game.players)
     await chan.set_permissions(player, overwrite=None)
-    await ctx.send('PLAYER REMOVED')
+    await ctx.send('Byeeeeeee~')
 
 
 @guild_only()
@@ -528,7 +537,7 @@ async def clear_lobbies(ctx):
     if ctx.message.author.guild_permissions.administrator:
         for chan in get_game_channels(ctx.guild):
             await chan.delete()
-        await ctx.send('64K RAM SYSTEM   38911 BASIC BYTES FREE\n\nREADY.')
+        await ctx.send('Goodbye, lobbies :3')
 
 
 @bot.command()
@@ -562,7 +571,7 @@ async def on_message(msg):
 @bot.event
 async def on_command_error(ctx, error):
     if isinstance(error, CommandNotFound):
-        return await ctx.send('COMMAND NOT ACCEPTED')
+        return await ctx.send('??? what')
     return await ctx.send(f'ERROR EXECUTING COMMAND: {error}')
     # raise error
 
